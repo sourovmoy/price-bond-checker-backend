@@ -5,7 +5,14 @@ const app = express();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const port = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_SERVER,
+    credentials: true,
+  }),
+);
+app.use(express.json());
+
 const uri = process.env.MONGODB_URI;
 
 const client = new MongoClient(uri, {
@@ -25,13 +32,34 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
     const database = client.db("pricebond-checker");
-    const users = database.collection("users");
+    const usersCollection = database.collection("users");
 
     app.post("/user", async (req, res) => {
       try {
         const user = req.body;
-        console.log(user);
-      } catch (error) {}
+        user.role = "member";
+        user.created_at = new Date();
+        const email = user?.email;
+        const existUser = await usersCollection.findOne({ email: email });
+        if (existUser) {
+          return res.status(200).json({
+            message: "User already exists",
+            user: existUser,
+          });
+        }
+
+        const results = await usersCollection.insertOne(user);
+
+        res.status(201).json({
+          message: "User is stored to database",
+          results,
+        });
+      } catch (error) {
+        res.status(500).json({
+          message: "Internal Server Error",
+          error: error.message,
+        });
+      }
     });
 
     // Send a ping to confirm a successful connection
@@ -41,7 +69,7 @@ async function run() {
     );
   } finally {
     // Ensures that the client will close when you finish/error
-    await client.close();
+    // await client.close();
   }
 }
 run().catch(console.dir);
