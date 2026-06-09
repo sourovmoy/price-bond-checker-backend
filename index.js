@@ -5,6 +5,17 @@ const app = express();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const port = process.env.PORT || 3000;
 
+// 🔥 New modular firebase imports to fix version crashes
+const { initializeApp, getApps, cert } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
+const serviceAccount = require("./price-bond-checker-firebase-admin.json");
+
+// ✅ Fixes: TypeError: Cannot read properties of undefined (reading 'length')
+if (getApps().length === 0) {
+  initializeApp({
+    credential: cert(serviceAccount),
+  });
+}
 app.use(
   cors({
     origin: process.env.FRONTEND_SERVER,
@@ -26,6 +37,20 @@ const client = new MongoClient(uri, {
 app.get("/", (req, res) => {
   res.send("Hello World!");
 });
+// middlewares
+const verifyJWT = async (req, res, next) => {
+  const token = req?.headers?.authorization?.split(" ")[1];
+
+  if (!token) return res.status(401).send({ message: "Unauthorized Access!" });
+  try {
+    // here update needed for verson update
+    const decoded = await getAuth().verifyIdToken(token);
+    req.tokenEmail = decoded.email;
+    next();
+  } catch (err) {
+    return res.status(401).send({ message: "Unauthorized Access!", err });
+  }
+};
 
 async function run() {
   try {
@@ -33,6 +58,7 @@ async function run() {
     await client.connect();
     const database = client.db("pricebond-checker");
     const usersCollection = database.collection("users");
+    const pricebondCollection = database.collection("Pricebonds");
 
     app.post("/user", async (req, res) => {
       try {
@@ -60,6 +86,9 @@ async function run() {
           error: error.message,
         });
       }
+    });
+    app.post("/add-price-bond", verifyJWT, (req, res) => {
+      console.log(req.body, req.tokenEmail);
     });
 
     // Send a ping to confirm a successful connection
