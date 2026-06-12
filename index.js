@@ -1,13 +1,17 @@
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const app = express();
-const { MongoClient, ServerApiVersion } = require("mongodb");
-const port = process.env.PORT || 3000;
+import dotenv from "dotenv";
+dotenv.config();
 
-// 🔥 Firebase Admin Imports
-const { initializeApp, getApps, cert } = require("firebase-admin/app");
-const { getAuth } = require("firebase-admin/auth");
+import express from "express";
+import cors from "cors";
+import { MongoClient, ServerApiVersion } from "mongodb";
+import { Buffer } from "buffer"; // ✅ ES Module-এ নিরাপদ ডিকোডিংয়ের জন্য
+
+// 🔥 Firebase v14 সরাসরি ইম্পোর্ট (কোনো মডিউল এরর ছাড়া)
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+
+const app = express(); // ✅ ফিক্স: app ইনিশিয়ালাইজ করা হলো
+const port = process.env.PORT || 3000; // ✅ ফিক্স: port ডিফাইন করা হলো
 
 // ✅ Firebase Admin Initialization
 try {
@@ -51,10 +55,10 @@ const client = new MongoClient(uri, {
   },
 });
 
-// 🚀 Vercel-এর জন্য ডাইনামিক ডাটাবেজ কানেকশন মিডলওয়্যার
+// 🚀 Vercel-এর জন্য ডাইনামিক ডাটাবেজ কানেকশন
 let dbInstance = null;
 async function getDB() {
-  if (dbInstance) return dbInstance; // আগে কানেক্টেড থাকলে নতুন করে কানেক্ট করবে না
+  if (dbInstance) return dbInstance;
   await client.connect();
   dbInstance = client.db("pricebond-checker");
   return dbInstance;
@@ -70,19 +74,21 @@ const verifyJWT = async (req, res, next) => {
     req.tokenEmail = decoded.email;
     next();
   } catch (err) {
-    return res.status(401).send({ message: "Unauthorized Access!", err });
+    return res
+      .status(401)
+      .send({ message: "Unauthorized Access!", err: err.message });
   }
 };
 
 // 🏠 Base Route
 app.get("/", (req, res) => {
-  res.send("Hello World! Server is running perfectly.");
+  res.send("Hello World! Server is running perfectly with ES Modules.");
 });
 
 // 👤 User Post Route
 app.post("/user", async (req, res) => {
   try {
-    const database = await getDB(); // ডাইনামিক কানেকশন কল
+    const database = await getDB();
     const usersCollection = database.collection("users");
 
     const user = req.body;
@@ -114,7 +120,7 @@ app.post("/user", async (req, res) => {
 // 🎟️ Add Price Bond Route
 app.post("/add-price-bond", verifyJWT, async (req, res) => {
   try {
-    const database = await getDB(); // ডাইনামিক কানেকশন কল
+    const database = await getDB();
     const usersCollection = database.collection("users");
     const pricebondCollection = database.collection("Pricebonds");
 
