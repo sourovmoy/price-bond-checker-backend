@@ -8,14 +8,26 @@ const port = process.env.PORT || 3000;
 // 🔥 New modular firebase imports to fix version crashes
 const { initializeApp, getApps, cert } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
-const serviceAccount = require("./price-bond-checker-firebase-admin.json");
 
 // ✅ Fixes: TypeError: Cannot read properties of undefined (reading 'length')
-if (getApps().length === 0) {
-  initializeApp({
-    credential: cert(serviceAccount),
-  });
+try {
+  if (getApps().length === 0) {
+    // এনভায়রনমেন্ট ভেরিয়েবল থেকে Base64 স্ট্রিং এনে ডিকোড করা হচ্ছে
+    const decodedKey = Buffer.from(
+      process.env.FB_SERVICE_KEY,
+      "base64",
+    ).toString("utf-8");
+    const serviceAccount = JSON.parse(decodedKey);
+
+    initializeApp({
+      credential: cert(serviceAccount),
+    });
+    console.log("Firebase Admin Initialized! 🔥");
+  }
+} catch (error) {
+  console.error("Firebase Initialization Error ❌:", error.message);
 }
+
 app.use(
   cors({
     origin: process.env.FRONTEND_SERVER,
@@ -55,7 +67,7 @@ const verifyJWT = async (req, res, next) => {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     const database = client.db("pricebond-checker");
     const usersCollection = database.collection("users");
     const pricebondCollection = database.collection("Pricebonds");
@@ -87,12 +99,46 @@ async function run() {
         });
       }
     });
-    app.post("/add-price-bond", verifyJWT, (req, res) => {
-      console.log(req.body, req.tokenEmail);
+    app.post("/add-price-bond", verifyJWT, async (req, res) => {
+      try {
+        const { PriceBond } = req.body;
+        const email = req.tokenEmail;
+        const user = await usersCollection.findOne({ email });
+        if (!user) {
+          return res
+            .status(404)
+            .json({ message: "User not found in database!" });
+        }
+        const { name, phone } = user;
+
+        const query = { email: email };
+        const updateDoc = {
+          $setOnInsert: { name, phone, email },
+          $addToSet: { PriceBond: PriceBond },
+        };
+        const options = { upsert: true };
+
+        const result = await pricebondCollection.updateOne(
+          query,
+          updateDoc,
+          options,
+        );
+
+        res.status(200).json({
+          success: true,
+          message: "Price bond array updated successfully!",
+          result,
+        });
+      } catch (error) {
+        res.status(500).json({
+          message: "Internal Server Error",
+          error: error.message,
+        });
+      }
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
