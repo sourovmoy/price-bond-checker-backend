@@ -6,7 +6,6 @@ import cors from "cors";
 import { MongoClient, ServerApiVersion } from "mongodb";
 import { Buffer } from "buffer"; // ✅ ES Module-এ নিরাপদ ডিকোডিংয়ের জন্য
 
-// 🔥 Firebase v14 সরাসরি ইম্পোর্ট (কোনো মডিউল এরর ছাড়া)
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
@@ -59,9 +58,14 @@ const client = new MongoClient(uri, {
 let dbInstance = null;
 async function getDB() {
   if (dbInstance) return dbInstance;
-  await client.connect();
-  dbInstance = client.db("pricebond-checker");
-  return dbInstance;
+  try {
+    await client.connect();
+    dbInstance = client.db("pricebond-checker");
+    return dbInstance;
+  } catch (error) {
+    console.error("MongoDB connection failed:", error.message);
+    throw error;
+  }
 }
 
 // Firebase Token Verification Middleware
@@ -86,23 +90,25 @@ app.get("/", (req, res) => {
 });
 
 // 👤 User Post Route
-app.post("/user", async (req, res) => {
+app.post("/user", verifyJWT, async (req, res) => {
   try {
     const database = await getDB();
     const usersCollection = database.collection("users");
 
-    const user = req.body;
-    user.role = "member";
-    user.created_at = new Date();
-    const email = user?.email;
+    const email = req.tokenEmail;
 
-    const existUser = await usersCollection.findOne({ email: email });
+    const existUser = await usersCollection.findOne({ email });
     if (existUser) {
       return res.status(200).json({
         message: "User already exists",
         user: existUser,
       });
     }
+
+    const user = req.body;
+    user.role = "member";
+    user.created_at = new Date();
+    user.email = email;
 
     const results = await usersCollection.insertOne(user);
     res.status(201).json({
@@ -112,7 +118,6 @@ app.post("/user", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Internal Server Error",
-      error: error.message,
     });
   }
 });
@@ -154,7 +159,26 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Internal Server Error",
-      error: error.message,
+    });
+  }
+});
+
+// user role
+app.get("/user/role", verifyJWT, async (req, res) => {
+  try {
+    const database = await getDB();
+    const usersCollection = database.collection("users");
+    const email = req.tokenEmail;
+
+    const query = { email: email };
+    const user = await usersCollection.findOne(query);
+
+    res.status(200).json({
+      role: user?.role || "member",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to get user role",
     });
   }
 });
