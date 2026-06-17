@@ -183,10 +183,21 @@ app.get("/user/role", verifyJWT, async (req, res) => {
   }
 });
 
-// my bonds 
-app.get("/my-price-bond" , verifyJWT, async(req, res)=>{
-  
-})
+// my bonds
+app.get("/my-price-bond", verifyJWT, async (req, res) => {
+  try {
+    const email = req.tokenEmail;
+    const database = await getDB();
+    const pricebondCollection = database.collection("Pricebonds");
+    console.log(pricebondCollection);
+  } catch (error) {
+    console.log("from my pricebond", error.message);
+
+    res.status(500).json({
+      message: "Failed to get my bonds",
+    });
+  }
+});
 
 // Server Listen
 app.listen(port, () => {
