@@ -183,6 +183,11 @@ app.get("/user/role", verifyJWT, async (req, res) => {
   }
 });
 
+// my bonds 
+app.get("/my-price-bond" , verifyJWT, async(req, res)=>{
+  
+})
+
 // Server Listen
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
