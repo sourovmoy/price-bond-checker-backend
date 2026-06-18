@@ -3,7 +3,7 @@ dotenv.config();
 
 import express from "express";
 import cors from "cors";
-import { MongoClient, ServerApiVersion } from "mongodb";
+import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 import { Buffer } from "buffer"; // ✅ ES Module-এ নিরাপদ ডিকোডিংয়ের জন্য
 
 import { initializeApp, getApps, cert } from "firebase-admin/app";
@@ -334,6 +334,26 @@ app.get("/admin/all-users-bonds", verifyJWT, verifyAdmin, async (req, res) => {
     res.status(200).json(usersBondsData);
   } catch (error) {
     res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// For admin each users bond
+
+app.get("/admin/users-bond/:id", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const database = await getDB();
+    const pricebondCollection = database.collection("Pricebonds");
+    const result = await pricebondCollection.findOne(query);
+    res.status(200).json({
+      message: "Users bonds are found",
+      result: result || {},
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to get users bonds",
+    });
   }
 });
 
