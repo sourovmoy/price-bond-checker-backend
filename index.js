@@ -192,7 +192,7 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
         .json({ message: "এই বন্ড নম্বরটি আগেই যোগ করা হয়েছে!" });
     }
 
-    const { name, phone ,imageUrl } = user;
+    const { name, phone, imageUrl } = user;
 
     const newBond = {
       number: PriceBond,
