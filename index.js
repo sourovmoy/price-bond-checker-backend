@@ -121,6 +121,29 @@ app.post("/user", verifyJWT, async (req, res) => {
     });
   }
 });
+// 👤 User Update
+app.patch("/user/update-profile", verifyJWT, async (req, res) => {
+  try {
+    const database = await getDB();
+    const userCollection = database.collection("users");
+    const email = req.tokenEmail;
+    const query = { email: email };
+
+    const result = await userCollection.updateOne(query, {
+      $set: req.body,
+    });
+    res.status(201).json({
+      message: "User Update",
+      result,
+    });
+  } catch (error) {
+    console.log(error.message);
+
+    res.status(500).json({
+      message: "Cannot update the user",
+    });
+  }
+});
 
 // 🎟️ Add Price Bond Route
 app.post("/add-price-bond", verifyJWT, async (req, res) => {
@@ -136,30 +159,43 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found in database!" });
     }
+
+    // ✅ Duplicate check
+    const duplicate = await pricebondCollection.findOne({
+      email,
+      "PriceBond.number": PriceBond,
+    });
+
+    if (duplicate) {
+      return res
+        .status(409)
+        .json({ message: "এই বন্ড নম্বরটি আগেই যোগ করা হয়েছে!" });
+    }
+
     const { name, phone } = user;
 
-    const query = { email: email };
-    const updateDoc = {
-      $setOnInsert: { name, phone, email },
-      $addToSet: { PriceBond: PriceBond },
+    const newBond = {
+      number: PriceBond,
+      addedAt: new Date(),
+      result: "pending",
     };
-    const options = { upsert: true };
 
     const result = await pricebondCollection.updateOne(
-      query,
-      updateDoc,
-      options,
+      { email },
+      {
+        $setOnInsert: { name, phone, email },
+        $push: { PriceBond: newBond }, // ✅ $addToSet এর বদলে $push
+      },
+      { upsert: true },
     );
 
     res.status(200).json({
       success: true,
-      message: "Price bond array updated successfully!",
+      message: "বন্ড সফলভাবে যোগ হয়েছে!",
       result,
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Internal Server Error",
-    });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
@@ -189,13 +225,60 @@ app.get("/my-price-bond", verifyJWT, async (req, res) => {
     const email = req.tokenEmail;
     const database = await getDB();
     const pricebondCollection = database.collection("Pricebonds");
-    console.log(pricebondCollection);
+    const query = { email: email };
+    const result = await pricebondCollection.findOne(query);
+    res.status(200).json({
+      message: "PriceBonds are found",
+      PriceBond: result?.PriceBond || [],
+    });
   } catch (error) {
     console.log("from my pricebond", error.message);
 
     res.status(500).json({
       message: "Failed to get my bonds",
     });
+  }
+});
+
+// User Overview
+app.get("/dashboard/stats", verifyJWT, async (req, res) => {
+  try {
+    const db = await getDB();
+    const pricebondCollection = db.collection("Pricebonds");
+    const email = req.tokenEmail;
+
+    const result = await pricebondCollection.findOne({ email });
+    const bonds = result?.PriceBond || [];
+
+    const total = bonds.length;
+    const won = bonds.filter((b) => b.result === "won").length;
+    const lost = bonds.filter((b) => b.result === "lost").length;
+    const pending = bonds.filter((b) => b.result === "pending").length;
+    const totalValue = total * 100;
+
+    // মাস অনুযায়ী count
+    const monthMap = {};
+    bonds.forEach((bond) => {
+      if (!bond.addedAt) return;
+      const date = new Date(bond.addedAt);
+      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      monthMap[month] = (monthMap[month] || 0) + 1;
+    });
+
+    const monthlyData = Object.entries(monthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, count]) => ({ month, count }));
+
+    res.status(200).json({
+      total,
+      won,
+      lost,
+      pending,
+      totalValue,
+      monthlyData,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
