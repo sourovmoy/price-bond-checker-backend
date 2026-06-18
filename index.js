@@ -83,6 +83,26 @@ const verifyJWT = async (req, res, next) => {
       .send({ message: "Unauthorized Access!", err: err.message });
   }
 };
+// Verify Admin
+const verifyAdmin = async (req, res, next) => {
+  try {
+    const database = await getDB();
+    const usersCollection = database.collection("users");
+    const email = req.tokenEmail; // verifyJWT থেকে পাওয়া ইমেইল
+
+    const user = await usersCollection.findOne({ email });
+
+    if (!user || user.role !== "admin") {
+      return res
+        .status(403)
+        .json({ message: "Forbidden Access! অ্যাডমিন ছাড়া অনুমতি নেই।" });
+    }
+
+    next();
+  } catch (error) {
+    res.status(500).json({ message: "Admin verification failed" });
+  }
+};
 
 // 🏠 Base Route
 app.get("/", (req, res) => {
@@ -172,7 +192,7 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
         .json({ message: "এই বন্ড নম্বরটি আগেই যোগ করা হয়েছে!" });
     }
 
-    const { name, phone } = user;
+    const { name, phone ,imageUrl } = user;
 
     const newBond = {
       number: PriceBond,
@@ -183,7 +203,7 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
     const result = await pricebondCollection.updateOne(
       { email },
       {
-        $setOnInsert: { name, phone, email },
+        $setOnInsert: { name, phone, email, imageUrl },
         $push: { PriceBond: newBond }, // ✅ $addToSet এর বদলে $push
       },
       { upsert: true },
@@ -277,6 +297,41 @@ app.get("/dashboard/stats", verifyJWT, async (req, res) => {
       totalValue,
       monthlyData,
     });
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// Admin all pricebonds
+app.get("/admin/all-users-bonds", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const database = await getDB();
+    const pricebondCollection = database.collection("Pricebonds");
+
+    // মঙ্গোডিবি এগ্রিগেশন পাইপলাইন ব্যবহার করে অপ্টিমাইজড ডাটা নিয়ে আসা
+    const usersBondsData = await pricebondCollection
+      .aggregate([
+        {
+          $project: {
+            _id: 1,
+            name: 1,
+            email: 1,
+            phone: 1,
+            imageUrl: 1,
+            // যদি PriceBond অ্যারে থাকে তবে তার সাইজ (সংখ্যা) বের করবে, না থাকলে ০ দেবে
+            bondsCount: {
+              $cond: {
+                if: { $isArray: "$PriceBond" },
+                then: { $size: "$PriceBond" },
+                else: 0,
+              },
+            },
+          },
+        },
+      ])
+      .toArray();
+
+    res.status(200).json(usersBondsData);
   } catch (error) {
     res.status(500).json({ message: "Internal Server Error" });
   }
