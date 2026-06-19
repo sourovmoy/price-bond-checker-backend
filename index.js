@@ -6,7 +6,9 @@ import cors from "cors";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 import { Buffer } from "buffer";
 import multer from "multer";
-import { PDFParse } from "pdf-parse";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
@@ -427,13 +429,14 @@ app.post(
         return res.status(400).json({ message: "PDF ফাইল আপলোড করুন!" });
       }
 
-      const parser = new PDFParse({ data: req.file.buffer });
-      const result = await parser.getText();
-      const text = result.text;
+      const data = await pdfParse(req.file.buffer);
+      const text = data.text;
 
       // ✅ শুধু 7-digit winning numbers বের করো
       const numberPattern = /\b\d{7}\b/g;
       const matchedNumbers = [...new Set(text.match(numberPattern) || [])];
+      console.log("Matched numbers:", matchedNumbers);
+      console.log("Total matched:", matchedNumbers.length);
 
       if (matchedNumbers.length === 0) {
         return res.status(400).json({

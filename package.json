@@ -19,6 +19,6 @@
     "firebase-admin": "^13.0.1",
     "mongodb": "^7.2.0",
     "multer": "^2.2.0",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^1.1.1"
   }
 }
