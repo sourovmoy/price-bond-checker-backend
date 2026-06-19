@@ -4,13 +4,16 @@ dotenv.config();
 import express from "express";
 import cors from "cors";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
-import { Buffer } from "buffer"; // ✅ ES Module-এ নিরাপদ ডিকোডিংয়ের জন্য
+import { Buffer } from "buffer";
+import multer from "multer";
+import { PDFParse } from "pdf-parse";
 
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
-const app = express(); // ✅ ফিক্স: app ইনিশিয়ালাইজ করা হলো
-const port = process.env.PORT || 3000; // ✅ ফিক্স: port ডিফাইন করা হলো
+const app = express();
+const port = process.env.PORT || 3000;
+const upload = multer({ storage: multer.memoryStorage() });
 
 // ✅ Firebase Admin Initialization
 try {
@@ -252,8 +255,6 @@ app.get("/my-price-bond", verifyJWT, async (req, res) => {
       PriceBond: result?.PriceBond || [],
     });
   } catch (error) {
-    console.log("from my pricebond", error.message);
-
     res.status(500).json({
       message: "Failed to get my bonds",
     });
@@ -413,6 +414,76 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
+
+// For result upload
+app.post(
+  "/admin/upload-result",
+  verifyJWT,
+  verifyAdmin,
+  upload.single("resultPdf"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "PDF ফাইল আপলোড করুন!" });
+      }
+
+      const parser = new PDFParse({ data: req.file.buffer });
+      const result = await parser.getText();
+      const text = result.text;
+
+      // ✅ শুধু 7-digit winning numbers বের করো
+      const numberPattern = /\b\d{7}\b/g;
+      const matchedNumbers = [...new Set(text.match(numberPattern) || [])];
+
+      if (matchedNumbers.length === 0) {
+        return res.status(400).json({
+          message: "PDF থেকে কোনো বন্ড নম্বর খুঁজে পাওয়া যায়নি!",
+        });
+      }
+
+      const db = await getDB();
+      const pricebondCollection = db.collection("Pricebonds");
+
+      const allDocs = await pricebondCollection.find({}).toArray();
+
+      let updatedUserCount = 0;
+      let totalWonBonds = 0;
+
+      for (const doc of allDocs) {
+        let changed = false;
+
+        const updatedBonds = (doc.PriceBond || []).map((bond) => {
+          const last7 = bond.number.slice(-7);
+
+          if (bond.result === "pending" && matchedNumbers.includes(last7)) {
+            changed = true;
+            totalWonBonds++;
+            return { ...bond, result: "won" };
+          }
+          return bond;
+        });
+
+        if (changed) {
+          await pricebondCollection.updateOne(
+            { _id: doc._id },
+            { $set: { PriceBond: updatedBonds } },
+          );
+          updatedUserCount++;
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `${matchedNumbers.length}টি বিজয়ী নম্বর পাওয়া গেছে। ${updatedUserCount}জন ইউজারের মোট ${totalWonBonds}টি বন্ড বিজয়ী হয়েছে।`,
+        matchedNumbers,
+      });
+    } catch (error) {
+      console.error("Upload result error:", error.message);
+      res.status(500).json({ message: "PDF প্রসেস করতে ব্যর্থ হয়েছে!" });
+    }
+  },
+);
+
 // Server Listen
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
