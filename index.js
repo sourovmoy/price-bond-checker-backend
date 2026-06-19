@@ -12,6 +12,7 @@ const pdfParse = require("pdf-parse");
 
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { sendWindowNotification } from "./Utils/sendEmail.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -428,15 +429,11 @@ app.post(
       if (!req.file) {
         return res.status(400).json({ message: "PDF ফাইল আপলোড করুন!" });
       }
-
       const data = await pdfParse(req.file.buffer);
       const text = data.text;
 
-      // ✅ শুধু 7-digit winning numbers বের করো
       const numberPattern = /\b\d{7}\b/g;
       const matchedNumbers = [...new Set(text.match(numberPattern) || [])];
-      console.log("Matched numbers:", matchedNumbers);
-      console.log("Total matched:", matchedNumbers.length);
 
       if (matchedNumbers.length === 0) {
         return res.status(400).json({
@@ -446,21 +443,22 @@ app.post(
 
       const db = await getDB();
       const pricebondCollection = db.collection("Pricebonds");
-
       const allDocs = await pricebondCollection.find({}).toArray();
 
       let updatedUserCount = 0;
       let totalWonBonds = 0;
+      let emailPromises = [];
 
       for (const doc of allDocs) {
         let changed = false;
-
+        const wonBondsForThisUser = [];
         const updatedBonds = (doc.PriceBond || []).map((bond) => {
           const last7 = bond.number.slice(-7);
 
           if (bond.result === "pending" && matchedNumbers.includes(last7)) {
             changed = true;
             totalWonBonds++;
+            wonBondsForThisUser.push(bond.number);
             return { ...bond, result: "won" };
           }
           return bond;
@@ -472,8 +470,14 @@ app.post(
             { $set: { PriceBond: updatedBonds } },
           );
           updatedUserCount++;
+          wonBondsForThisUser.forEach((bondNumber) => {
+            emailPromises.push(
+              sendWindowNotification(doc.email, doc.name, bondNumber),
+            );
+          });
         }
       }
+      await Promise.allSettled(emailPromises);
 
       res.status(200).json({
         success: true,
@@ -481,7 +485,6 @@ app.post(
         matchedNumbers,
       });
     } catch (error) {
-      console.error("Upload result error:", error.message);
       res.status(500).json({ message: "PDF প্রসেস করতে ব্যর্থ হয়েছে!" });
     }
   },
