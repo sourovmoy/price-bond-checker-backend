@@ -357,6 +357,62 @@ app.get("/admin/users-bond/:id", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
+// For admin stats
+app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const db = await getDB();
+    const usersCollection = db.collection("users");
+    const pricebondCollection = db.collection("Pricebonds");
+    // admin check
+    const requester = await usersCollection.findOne({ email: req.tokenEmail });
+    const totalUsers = await usersCollection.countDocuments();
+    const allBondDocs = await pricebondCollection.find({}).toArray();
+
+    let totalBonds = 0;
+    let totalWon = 0;
+    let totalLost = 0;
+    let totalPending = 0;
+
+    const userBondData = allBondDocs.map((doc) => {
+      const bonds = doc.PriceBond || [];
+      const won = bonds.filter((b) => b.result === "won").length;
+      const lost = bonds.filter((b) => b.result === "lost").length;
+      const pending = bonds.filter((b) => b.result === "pending").length;
+
+      totalBonds += bonds.length;
+      totalWon += won;
+      totalLost += lost;
+      totalPending += pending;
+
+      return {
+        name: doc.name,
+        email: doc.email,
+        totalBonds: bonds.length,
+        won,
+        lost,
+        pending,
+      };
+    });
+
+    // chart-এর জন্য sort করে top users নাও (descending)
+    const chartData = userBondData
+      .sort((a, b) => b.totalBonds - a.totalBonds)
+      .slice(0, 10); // top 10 user
+
+    res.status(200).json({
+      totalUsers,
+      totalBonds,
+      totalWon,
+      totalLost,
+      totalPending,
+      totalValue: totalBonds * 100,
+      users: userBondData, // table-এর জন্য full list
+      chartData, // chart-এর জন্য top 10
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 // Server Listen
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
