@@ -596,6 +596,24 @@ app.patch("/notification/mark-all-read", verifyJWT, async (req, res) => {
     res.status(500).json({ message: "Update করতে ব্যর্থ হয়েছে!" });
   }
 });
+//user er data show er jonno
+app.get("/user/me", verifyJWT, async (req, res) => {
+  try {
+    const database = await getDB();
+    const userCollection = database.collection("users");
+    const email = req.tokenEmail; // verifyJWT থেকে পাওয়া ইমেইল
+
+    const user = await userCollection.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: "Failed to get user data" });
+  }
+});
 
 // Server Listen
 app.listen(port, () => {
