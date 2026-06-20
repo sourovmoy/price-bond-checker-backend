@@ -443,11 +443,13 @@ app.post(
 
       const db = await getDB();
       const pricebondCollection = db.collection("Pricebonds");
+      const notificationCollection = db.collection("notifications");
       const allDocs = await pricebondCollection.find({}).toArray();
 
       let updatedUserCount = 0;
       let totalWonBonds = 0;
       let emailPromises = [];
+      let notificationDocs = [];
 
       for (const doc of allDocs) {
         let changed = false;
@@ -474,8 +476,19 @@ app.post(
             emailPromises.push(
               sendWindowNotification(doc.email, doc.name, bondNumber),
             );
+            notificationDocs.push({
+              email: doc.email,
+              name: doc.name,
+              bondNumber,
+              message: `আপনার বন্ড ${bondNumber} বিজয়ী হয়েছে!`,
+              isRead: false,
+              createdAt: new Date(),
+            });
           });
         }
+      }
+      if (notificationDocs.length > 0) {
+        await notificationCollection.insertMany(notificationDocs);
       }
       await Promise.allSettled(emailPromises);
 
@@ -489,6 +502,100 @@ app.post(
     }
   },
 );
+
+// For bond delete
+app.delete("/delete-bond/:bondNumber", verifyJWT, async (req, res) => {
+  try {
+    const email = req.tokenEmail;
+    const bondNumber = decodeURIComponent(req.params.bondNumber); // ✅ decode করো
+
+    const db = await getDB();
+    const pricebondCollection = db.collection("Pricebonds");
+
+    const result = await pricebondCollection.updateOne(
+      { email },
+      { $pull: { PriceBond: { number: bondNumber } } },
+    );
+
+    if (result.modifiedCount === 0) {
+      return res
+        .status(404)
+        .json({ message: "এই বন্ডটি খুঁজে পাওয়া যায়নি!" });
+    }
+    res.status(200).json({
+      success: true,
+      message: "বন্ড সফলভাবে মুছে ফেলা হয়েছে!",
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// Notification for the user's won pricebonds
+app.get("/notification", verifyJWT, async (req, res) => {
+  try {
+    const email = req.tokenEmail;
+    const page = parseInt(req.query.page) || 1;
+    const limit = 3;
+    const skip = (page - 1) * limit;
+    const db = await getDB();
+    const notificationCollection = db.collection("notifications");
+    const notifications = await notificationCollection
+      .find({ email })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+    const totalCount = await notificationCollection.countDocuments({ email });
+    const hasMore = skip + notifications.length < totalCount;
+    res.status(200).json({
+      notifications,
+      hasMore,
+      totalCount,
+    });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: "Notification আনতে ব্যর্থ হয়েছে!" });
+  }
+});
+
+// Unread Count
+app.get("/notification/unread-count", verifyJWT, async (req, res) => {
+  try {
+    const email = req.tokenEmail;
+    const db = await getDB();
+    const notificationCollection = db.collection("notifications");
+
+    const count = await notificationCollection.countDocuments({
+      email,
+      isRead: false,
+    });
+
+    res.status(200).json({ count });
+  } catch (error) {
+    res.status(500).json({ message: "Count আনতে ব্যর্থ হয়েছে!" });
+  }
+});
+// Mark as unread
+app.patch("/notification/mark-all-read", verifyJWT, async (req, res) => {
+  try {
+    const email = req.tokenEmail;
+    const db = await getDB();
+    const notificationCollection = db.collection("notifications");
+
+    const result = await notificationCollection.updateMany(
+      { email, isRead: false },
+      { $set: { isRead: true } },
+    );
+
+    res.status(200).json({
+      success: true,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Update করতে ব্যর্থ হয়েছে!" });
+  }
+});
 
 // Server Listen
 app.listen(port, () => {
