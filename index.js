@@ -14,7 +14,7 @@ const pdfParse = require("pdf-parse");
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { sendWindowNotification } from "./Utils/sendEmail.js";
-import { renderUnsubscribePage } from "./Utils/renderUnsubscribePage .js";
+import { renderUnsubscribePage } from "./Utils/renderUnsubscribePage.js";
 import { introEmail } from "./Utils/SendIntroEmail.js";
 const app = express();
 const port = process.env.PORT || 3000;
@@ -647,6 +647,16 @@ app.get("/unsubscribe", async (req, res) => {
         .status(404)
         .send(renderUnsubscribePage("Not Found", "ইউজার পাওয়া যায়নি।"));
     }
+    if (!user.emailNotification) {
+      return res.send(
+        renderUnsubscribePage("Already Done", "আপনি আগেই unsubscribe করেছেন।"),
+      );
+    }
+
+    await usersCollection.updateOne(
+      { unsubscribeToken: token },
+      { $set: { emailNotification: false } },
+    );
     res.send(
       renderUnsubscribePage("সফল হয়েছে", "আপনাকে আর email পাঠানো হবে না।"),
     );
