@@ -15,7 +15,7 @@ import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { sendWindowNotification } from "./Utils/sendEmail.js";
 import { renderUnsubscribePage } from "./Utils/renderUnsubscribePage.js";
-import { introEmail } from "./Utils/SendIntroEmail.js";
+import { introEmail } from "./Utils/sendIntroEmail.js";
 const app = express();
 const port = process.env.PORT || 3000;
 const upload = multer({ storage: multer.memoryStorage() });
