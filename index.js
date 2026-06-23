@@ -424,7 +424,7 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-// For result upload
+// For result upload +
 app.post(
   "/admin/upload-result",
   verifyJWT,
