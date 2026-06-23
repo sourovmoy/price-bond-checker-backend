@@ -610,7 +610,8 @@ app.patch("/notification/mark-all-read", verifyJWT, async (req, res) => {
     res.status(500).json({ message: "Update করতে ব্যর্থ হয়েছে!" });
   }
 });
-//user er data show er jonno
+//user er data show er jonno ata
+
 app.get("/user/me", verifyJWT, async (req, res) => {
   try {
     const database = await getDB();
