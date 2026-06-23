@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -13,12 +14,12 @@ const pdfParse = require("pdf-parse");
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { sendWindowNotification } from "./Utils/sendEmail.js";
-
+import { renderUnsubscribePage } from "./Utils/renderUnsubscribePage .js";
+import { introEmail } from "./Utils/SendIntroEmail.js";
 const app = express();
 const port = process.env.PORT || 3000;
 const upload = multer({ storage: multer.memoryStorage() });
 
-// ✅ Firebase Admin Initialization
 try {
   if (getApps().length === 0) {
     let base64Key = process.env.FB_SERVICE_KEY;
@@ -135,8 +136,14 @@ app.post("/user", verifyJWT, async (req, res) => {
     user.role = "member";
     user.created_at = new Date();
     user.email = email;
+    user.emailNotification = true;
+    user.unsubscribeToken = crypto.randomUUID();
 
     const results = await usersCollection.insertOne(user);
+    if (results.acknowledged) {
+      introEmail(email, user?.name, user.unsubscribeToken);
+    }
+
     res.status(201).json({
       message: "User is stored to database",
       results,
@@ -398,7 +405,6 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
       };
     });
 
-    // chart-এর জন্য sort করে top users নাও (descending)
     const chartData = userBondData
       .sort((a, b) => b.totalBonds - a.totalBonds)
       .slice(0, 10); // top 10 user
@@ -442,6 +448,7 @@ app.post(
       }
 
       const db = await getDB();
+      const usersCollection = db.collection("users");
       const pricebondCollection = db.collection("Pricebonds");
       const notificationCollection = db.collection("notifications");
       const allDocs = await pricebondCollection.find({}).toArray();
@@ -472,19 +479,27 @@ app.post(
             { $set: { PriceBond: updatedBonds } },
           );
           updatedUserCount++;
-          wonBondsForThisUser.forEach((bondNumber) => {
-            emailPromises.push(
-              sendWindowNotification(doc.email, doc.name, bondNumber),
-            );
-            notificationDocs.push({
-              email: doc.email,
-              name: doc.name,
-              bondNumber,
-              message: `আপনার বন্ড ${bondNumber} বিজয়ী হয়েছে!`,
-              isRead: false,
-              createdAt: new Date(),
+          const userDoc = await usersCollection.findOne({ email: doc.email });
+          if (userDoc.emailNotification !== false) {
+            wonBondsForThisUser.forEach((bondNumber) => {
+              emailPromises.push(
+                sendWindowNotification(
+                  doc.email,
+                  doc.name,
+                  bondNumber,
+                  userDoc?.unsubscribeToken,
+                ),
+              );
+              notificationDocs.push({
+                email: doc.email,
+                name: doc.name,
+                bondNumber,
+                message: `আপনার বন্ড ${bondNumber} বিজয়ী হয়েছে!`,
+                isRead: false,
+                createdAt: new Date(),
+              });
             });
-          });
+          }
         }
       }
       if (notificationDocs.length > 0) {
@@ -554,7 +569,6 @@ app.get("/notification", verifyJWT, async (req, res) => {
       totalCount,
     });
   } catch (error) {
-    console.error(error.message);
     res.status(500).json({ message: "Notification আনতে ব্যর্থ হয়েছে!" });
   }
 });
@@ -601,7 +615,7 @@ app.get("/user/me", verifyJWT, async (req, res) => {
   try {
     const database = await getDB();
     const userCollection = database.collection("users");
-    const email = req.tokenEmail; // verifyJWT থেকে পাওয়া ইমেইল
+    const email = req.tokenEmail;
 
     const user = await userCollection.findOne({ email });
     if (!user) {
@@ -610,11 +624,37 @@ app.get("/user/me", verifyJWT, async (req, res) => {
 
     res.status(200).json(user);
   } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ message: "Failed to get user data" });
+    res.status(500).json({ message: "Failed to get user me" });
   }
 });
 
+//Unsubscribe email
+app.get("/unsubscribe", async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) {
+      return res
+        .status(400)
+        .send(renderUnsubscribePage("Invalid", "লিংকটি সঠিক নয়।"));
+    }
+    const db = await getDB();
+    const usersCollection = db.collection("users");
+
+    const user = await usersCollection.findOne({ unsubscribeToken: token });
+    if (!user) {
+      return res
+        .status(404)
+        .send(renderUnsubscribePage("Not Found", "ইউজার পাওয়া যায়নি।"));
+    }
+    res.send(
+      renderUnsubscribePage("সফল হয়েছে", "আপনাকে আর email পাঠানো হবে না।"),
+    );
+  } catch (error) {
+    res
+      .status(500)
+      .send(renderUnsubscribePage("Error", "কিছু একটা সমস্যা হয়েছে।"));
+  }
+});
 // Server Listen
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);

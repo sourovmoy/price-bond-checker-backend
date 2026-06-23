@@ -1,17 +1,18 @@
 import nodemailer from "nodemailer";
 
-export const sendWindowNotification = async (
-  toEmail,
-  userName,
-  bondNumber,
-  unsubscribeToken,
-) => {
+export const introEmail = async (toEmail, userName, unsubscribeToken) => {
   const emailUser = process.env.EMAIL_USER;
   const emailPass = process.env.EMAIL_PASS;
-
-  if (!emailUser || !emailPass) return false;
+  if (!emailPass || !emailUser) {
+    console.error(
+      "❌ Error: Email credentials are missing in process.env! from sendIntroMail",
+    );
+    return false;
+  }
 
   const unsubscribeUrl = `${process.env.BACKEND_SERVER}/unsubscribe?token=${unsubscribeToken}`;
+  const dashboardUrl = `${process.env.FRONTEND_SERVER}/dashboard`;
+  const supportEmail = process.env.EMAIL_USER;
 
   const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -20,17 +21,16 @@ export const sendWindowNotification = async (
       pass: emailPass,
     },
   });
-
   try {
     await transporter.sendMail({
-      from: `"প্রাইজ বন্ড চেকার" <${emailUser}>`,
+      from: `"প্রাইজ বন্ড চেকার" <${process.env.EMAIL_USER}>`,
       to: toEmail,
-      subject: `আপনার বন্ড ${bondNumber} বিজয়ী হয়েছে!`,
+      subject: `স্বাগতম, ${userName}!`,
       headers: {
         "List-Unsubscribe": `<${unsubscribeUrl}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
-      text: `অভিনন্দন ${userName}!\n\nআপনার বন্ড ${bondNumber} বিজয়ী হয়েছে।\n\nড্যাশবোর্ড: ${process.env.APP_URL}\n\nআর email পেতে না চাইলে: ${unsubscribeUrl}`,
+      text: `স্বাগতম ${userName}!\n\nআপনার একাউন্ট তৈরি হয়েছে।\nড্যাশবোর্ড: ${dashboardUrl}\n\nUnsubscribe: ${unsubscribeUrl}`,
       html: `<!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -42,31 +42,24 @@ export const sendWindowNotification = async (
   <tr><td align="center">
   <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px; width:100%; background:#ffffff; border-radius:8px; overflow:hidden;">
 
+    <!-- Accent line -->
     <tr><td style="height:4px; background:#244B43;"></td></tr>
 
+    <!-- Body -->
     <tr>
       <td style="padding:40px 40px 32px;">
         <p style="margin:0 0 28px; font-size:13px; color:#888; letter-spacing:1px; text-transform:uppercase;">প্রাইজ বন্ড চেকার</p>
 
-        <h1 style="margin:0 0 16px; color:#1a1a1a; font-size:22px; font-weight:600;">অভিনন্দন, ${userName}!</h1>
+        <h1 style="margin:0 0 16px; color:#1a1a1a; font-size:22px; font-weight:600;">স্বাগতম, ${userName}!</h1>
 
-        <p style="margin:0 0 24px; color:#555; font-size:15px; line-height:1.8;">
-          আপনার নিচের প্রাইজ বন্ডটি এই মাসের ড্রতে বিজয়ী হয়েছে।
+        <p style="margin:0 0 28px; color:#555; font-size:15px; line-height:1.8;">
+          আপনার একাউন্ট তৈরি হয়েছে। এখন থেকে আপনার প্রাইজ বন্ড যোগ করুন — ড্র রেজাল্ট বের হলে বিজয়ী হলে আপনাকে ইমেইলে জানানো হবে।
         </p>
-
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f8f5; border:1px solid #c8e8df; border-radius:8px; margin-bottom:28px;">
-          <tr>
-            <td style="padding:20px; text-align:center;">
-              <p style="margin:0 0 6px; font-size:12px; color:#4a7a6e; text-transform:uppercase; letter-spacing:0.5px;">বিজয়ী বন্ড নম্বর</p>
-              <p style="margin:0; font-size:26px; font-weight:700; color:#244B43; letter-spacing:3px; font-family:'Courier New', monospace;">${bondNumber}</p>
-            </td>
-          </tr>
-        </table>
 
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
           <tr>
             <td style="background:#244B43; border-radius:6px;">
-              <a href="${process.env.FRONTEND_SERVER}/dashboard" style="display:inline-block; color:#ffffff; text-decoration:none; padding:12px 28px; font-size:14px; font-weight:500;">
+              <a href="${dashboardUrl}" style="display:inline-block; color:#ffffff; text-decoration:none; padding:12px 28px; font-size:14px; font-weight:500;">
                 ড্যাশবোর্ড খুলুন &rarr;
               </a>
             </td>
@@ -76,17 +69,18 @@ export const sendWindowNotification = async (
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
           <tr><td style="border-top:1px solid #f0f0f0; padding-top:24px;">
             <p style="margin:0; color:#999; font-size:13px; line-height:1.7;">
-              কোনো সমস্যা হলে — <a href="mailto:${emailUser}" style="color:#244B43; text-decoration:none;">${emailUser}</a>
+              কোনো সমস্যা হলে — <a href="mailto:${supportEmail}" style="color:#244B43; text-decoration:none;">${supportEmail}</a>
             </p>
           </td></tr>
         </table>
       </td>
     </tr>
 
+    <!-- Footer -->
     <tr>
       <td style="background:#fafafa; border-top:1px solid #f0f0f0; padding:16px 40px;">
         <p style="margin:0; font-size:12px; color:#bbb;">
-          আপনি প্রাইজ বন্ড চেকারে সাইন আপ করেছেন বলে এই ইমেইল পাঠানো হয়েছে। &nbsp;
+          আপনি সাইন আপ করেছেন বলে এই ইমেইল পাঠানো হয়েছে। &nbsp;
           <a href="${unsubscribeUrl}" style="color:#bbb; text-decoration:none;">Unsubscribe</a>
         </p>
       </td>
@@ -98,8 +92,7 @@ export const sendWindowNotification = async (
 </body>
 </html>`,
     });
-    console.log(`✅ Email sent to ${toEmail}`);
   } catch (error) {
-    console.error(`❌ Failed to send email to ${toEmail}:`, error.message);
+    console.log(error.message);
   }
 };
