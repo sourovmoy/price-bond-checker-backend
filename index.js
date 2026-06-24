@@ -854,6 +854,25 @@ app.get("/unsubscribe", async (req, res) => {
       .send(renderUnsubscribePage("Error", "কিছু একটা সমস্যা হয়েছে।"));
   }
 });
+
+// for show all the results
+app.get("/price-bonds-all-result", async (req, res) => {
+  try {
+    const database = await getDB();
+    const prizeResultCollection = database.collection("PrizebondResults");
+    const result = await prizeResultCollection.find().toArray();
+    res.status(200).json({
+      message: "All result",
+      result,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      message: "Data is not feched",
+    });
+  }
+});
 // Server Listen
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
