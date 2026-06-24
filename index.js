@@ -121,7 +121,6 @@ app.post("/user", verifyJWT, async (req, res) => {
   try {
     const database = await getDB();
     const usersCollection = database.collection("users");
-
     const email = req.tokenEmail;
 
     const existUser = await usersCollection.findOne({ email });
@@ -132,16 +131,23 @@ app.post("/user", verifyJWT, async (req, res) => {
       });
     }
 
-    const user = req.body;
-    user.role = "member";
-    user.created_at = new Date();
-    user.email = email;
-    user.emailNotification = true;
-    user.unsubscribeToken = crypto.randomUUID();
+    const { name, photoURL } = req.body;
+    const user = {
+      name,
+      photoURL,
+      email,
+      role: "member",
+      created_at: new Date(),
+      emailNotification: true,
+      unsubscribeToken: crypto.randomUUID(),
+    };
 
     const results = await usersCollection.insertOne(user);
+
     if (results.acknowledged) {
-      introEmail(email, user?.name, user.unsubscribeToken);
+      introEmail(email, name, user.unsubscribeToken).catch((err) =>
+        console.error("Intro email failed:", err.message),
+      );
     }
 
     res.status(201).json({
@@ -149,6 +155,7 @@ app.post("/user", verifyJWT, async (req, res) => {
       results,
     });
   } catch (error) {
+    console.error("POST /user error:", error);
     res.status(500).json({
       message: "Internal Server Error",
     });
@@ -170,8 +177,6 @@ app.patch("/user/update-profile", verifyJWT, async (req, res) => {
       result,
     });
   } catch (error) {
-    console.log(error.message);
-
     res.status(500).json({
       message: "Cannot update the user",
     });
@@ -424,7 +429,7 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-// For result upload +
+// For result upload
 app.post(
   "/admin/upload-result",
   verifyJWT,
@@ -435,15 +440,62 @@ app.post(
       if (!req.file) {
         return res.status(400).json({ message: "PDF ফাইল আপলোড করুন!" });
       }
-      const data = await pdfParse(req.file.buffer);
+
+      const data = await pdfParse(req.file.buffer, { verbosity: -1 });
       const text = data.text;
 
       const numberPattern = /\b\d{7}\b/g;
-      const matchedNumbers = [...new Set(text.match(numberPattern) || [])];
+      const rawNumbers = text.match(numberPattern) || [];
 
-      if (matchedNumbers.length === 0) {
+      const allNumbers = rawNumbers.filter((num, idx) => {
+        if (num === "0000001" && idx === 0) return false;
+        return true;
+      });
+
+      if (allNumbers.length === 0) {
         return res.status(400).json({
           message: "PDF থেকে কোনো বন্ড নম্বর খুঁজে পাওয়া যায়নি!",
+        });
+      }
+
+      const prizeConfig = [
+        { tier: 1, label: "১ম পুরস্কার", amount: 600000, count: 1 },
+        { tier: 2, label: "২য় পুরস্কার", amount: 325000, count: 1 },
+        { tier: 3, label: "৩য় পুরস্কার", amount: 100000, count: 2 },
+        { tier: 4, label: "৪র্থ পুরস্কার", amount: 50000, count: 2 },
+        { tier: 5, label: "৫ম পুরস্কার", amount: 10000, count: 40 },
+      ];
+
+      const expectedTotal = prizeConfig.reduce((sum, p) => sum + p.count, 0);
+      if (allNumbers.length < expectedTotal) {
+        return res.status(400).json({
+          message: `PDF এ পর্যাপ্ত নম্বর নেই! পাওয়া গেছে ${allNumbers.length}টি, দরকার ${expectedTotal}টি।`,
+        });
+      }
+
+      const prizeResult = [];
+      const allWinningNumbers = new Set();
+      const numberToPrize = new Map();
+      let index = 0;
+
+      for (const prize of prizeConfig) {
+        const numbers = allNumbers.slice(index, index + prize.count);
+        index += prize.count;
+
+        numbers.forEach((num) => {
+          allWinningNumbers.add(num);
+          numberToPrize.set(num, {
+            tier: prize.tier,
+            label: prize.label,
+            amount: prize.amount,
+          });
+        });
+
+        prizeResult.push({
+          tier: prize.tier,
+          label: prize.label,
+          amount: prize.amount,
+          numbers,
         });
       }
 
@@ -451,69 +503,140 @@ app.post(
       const usersCollection = db.collection("users");
       const pricebondCollection = db.collection("Pricebonds");
       const notificationCollection = db.collection("notifications");
+      const prizeResultCollection = db.collection("PrizebondResults");
+
+      const existing = await prizeResultCollection.findOne({
+        numbers: { $in: [...allWinningNumbers] },
+      });
+      if (existing) {
+        return res.status(409).json({
+          message: "এই ড্র-এর ফলাফল আগেই আপলোড হয়েছে!",
+        });
+      }
+
       const allDocs = await pricebondCollection.find({}).toArray();
+      if (allDocs.length === 0) {
+        await prizeResultCollection.insertOne({
+          uploadedAt: new Date(),
+          uploadedBy: req.tokenEmail,
+          totalWinners: expectedTotal,
+          prizes: prizeResult,
+          numbers: [...allWinningNumbers],
+        });
+        return res.status(200).json({
+          success: true,
+          message: "ফলাফল সেভ হয়েছে। কোনো ইউজারের বন্ড match হয়নি।",
+          prizes: prizeResult,
+        });
+      }
+
+      const userEmails = allDocs.map((doc) => doc.email);
+      const allUsers = await usersCollection
+        .find({ email: { $in: userEmails } })
+        .toArray();
+      const userMap = new Map(allUsers.map((u) => [u.email, u]));
 
       let updatedUserCount = 0;
       let totalWonBonds = 0;
-      let emailPromises = [];
-      let notificationDocs = [];
+      const bulkOps = [];
+      const notificationDocs = [];
+      const emailPromises = [];
 
       for (const doc of allDocs) {
         let changed = false;
         const wonBondsForThisUser = [];
+
         const updatedBonds = (doc.PriceBond || []).map((bond) => {
           const last7 = bond.number.slice(-7);
 
-          if (bond.result === "pending" && matchedNumbers.includes(last7)) {
+          if (bond.result === "pending" && allWinningNumbers.has(last7)) {
+            const prizeInfo = numberToPrize.get(last7);
             changed = true;
             totalWonBonds++;
-            wonBondsForThisUser.push(bond.number);
-            return { ...bond, result: "won" };
+            wonBondsForThisUser.push({
+              number: bond.number,
+              ...prizeInfo,
+            });
+            return { ...bond, result: "won", ...prizeInfo };
           }
           return bond;
         });
 
         if (changed) {
-          await pricebondCollection.updateOne(
-            { _id: doc._id },
-            { $set: { PriceBond: updatedBonds } },
-          );
+          bulkOps.push({
+            updateOne: {
+              filter: { _id: doc._id },
+              update: { $set: { PriceBond: updatedBonds } },
+            },
+          });
+
           updatedUserCount++;
-          const userDoc = await usersCollection.findOne({ email: doc.email });
-          if (userDoc.emailNotification !== false) {
-            wonBondsForThisUser.forEach((bondNumber) => {
-              emailPromises.push(
-                sendWindowNotification(
-                  doc.email,
-                  doc.name,
-                  bondNumber,
-                  userDoc?.unsubscribeToken,
-                ),
-              );
-              notificationDocs.push({
-                email: doc.email,
-                name: doc.name,
-                bondNumber,
-                message: `আপনার বন্ড ${bondNumber} বিজয়ী হয়েছে!`,
-                isRead: false,
-                createdAt: new Date(),
-              });
+
+          const userDoc = userMap.get(doc.email);
+          if (!userDoc) {
+            console.warn(`User not found for email: ${doc.email}`);
+            continue;
+          }
+
+          wonBondsForThisUser.forEach(({ number, label, amount }) => {
+            notificationDocs.push({
+              email: doc.email,
+              name: doc.name,
+              bondNumber: number,
+              prize: { label, amount },
+              message: `আপনার বন্ড ${number} বিজয়ী হয়েছে! পুরস্কার: ${label} - ৳${amount.toLocaleString("bn-BD")}`,
+              isRead: false,
+              createdAt: new Date(),
             });
+          });
+
+          if (
+            userDoc.emailNotification !== false &&
+            wonBondsForThisUser.length > 0
+          ) {
+            emailPromises.push(
+              sendWindowNotification(
+                doc.email,
+                doc.name,
+                wonBondsForThisUser,
+                userDoc.unsubscribeToken,
+              ),
+            );
           }
         }
       }
+
+      if (bulkOps.length > 0) {
+        await pricebondCollection.bulkWrite(bulkOps);
+      }
+
       if (notificationDocs.length > 0) {
         await notificationCollection.insertMany(notificationDocs);
       }
+
       await Promise.allSettled(emailPromises);
+
+      await prizeResultCollection.insertOne({
+        uploadedAt: new Date(),
+        uploadedBy: req.tokenEmail,
+        totalWinners: expectedTotal,
+        prizes: prizeResult,
+        numbers: [...allWinningNumbers],
+      });
 
       res.status(200).json({
         success: true,
-        message: `${matchedNumbers.length}টি বিজয়ী নম্বর পাওয়া গেছে। ${updatedUserCount}জন ইউজারের মোট ${totalWonBonds}টি বন্ড বিজয়ী হয়েছে।`,
-        matchedNumbers,
+        message: `${allWinningNumbers.size}টি বিজয়ী নম্বর সেভ হয়েছে। ${updatedUserCount}জন ইউজারের মোট ${totalWonBonds}টি বন্ড বিজয়ী হয়েছে।`,
+        prizes: prizeResult,
       });
     } catch (error) {
-      res.status(500).json({ message: "PDF প্রসেস করতে ব্যর্থ হয়েছে!" });
+      console.error("Upload result error:", error);
+      res.status(500).json({
+        message: "PDF প্রসেস করতে ব্যর্থ হয়েছে!",
+        ...(process.env.NODE_ENV === "development" && {
+          error: error.message,
+        }),
+      });
     }
   },
 );

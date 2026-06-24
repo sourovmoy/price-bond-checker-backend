@@ -3,16 +3,10 @@ import nodemailer from "nodemailer";
 export const introEmail = async (toEmail, userName, unsubscribeToken) => {
   const emailUser = process.env.EMAIL_USER;
   const emailPass = process.env.EMAIL_PASS;
+
   if (!emailPass || !emailUser) {
-    console.error(
-      "❌ Error: Email credentials are missing in process.env! from sendIntroMail",
-    );
     return false;
   }
-
-  const unsubscribeUrl = `${process.env.BACKEND_SERVER}/unsubscribe?token=${unsubscribeToken}`;
-  const dashboardUrl = `${process.env.FRONTEND_SERVER}/dashboard`;
-  const supportEmail = process.env.EMAIL_USER;
 
   const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -21,9 +15,13 @@ export const introEmail = async (toEmail, userName, unsubscribeToken) => {
       pass: emailPass,
     },
   });
+
+  const unsubscribeUrl = `${process.env.BACKEND_SERVER}/unsubscribe?token=${unsubscribeToken}`;
+  const dashboardUrl = `${process.env.FRONTEND_SERVER}/dashboard`;
+
   try {
     await transporter.sendMail({
-      from: `"প্রাইজ বন্ড চেকার" <${process.env.EMAIL_USER}>`,
+      from: `"প্রাইজ বন্ড চেকার" <${emailUser}>`,
       to: toEmail,
       subject: `স্বাগতম, ${userName}!`,
       headers: {
@@ -41,21 +39,14 @@ export const introEmail = async (toEmail, userName, unsubscribeToken) => {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f3; padding:32px 0;">
   <tr><td align="center">
   <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px; width:100%; background:#ffffff; border-radius:8px; overflow:hidden;">
-
-    <!-- Accent line -->
     <tr><td style="height:4px; background:#244B43;"></td></tr>
-
-    <!-- Body -->
     <tr>
       <td style="padding:40px 40px 32px;">
         <p style="margin:0 0 28px; font-size:13px; color:#888; letter-spacing:1px; text-transform:uppercase;">প্রাইজ বন্ড চেকার</p>
-
         <h1 style="margin:0 0 16px; color:#1a1a1a; font-size:22px; font-weight:600;">স্বাগতম, ${userName}!</h1>
-
         <p style="margin:0 0 28px; color:#555; font-size:15px; line-height:1.8;">
           আপনার একাউন্ট তৈরি হয়েছে। এখন থেকে আপনার প্রাইজ বন্ড যোগ করুন — ড্র রেজাল্ট বের হলে বিজয়ী হলে আপনাকে ইমেইলে জানানো হবে।
         </p>
-
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
           <tr>
             <td style="background:#244B43; border-radius:6px;">
@@ -65,18 +56,15 @@ export const introEmail = async (toEmail, userName, unsubscribeToken) => {
             </td>
           </tr>
         </table>
-
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
           <tr><td style="border-top:1px solid #f0f0f0; padding-top:24px;">
             <p style="margin:0; color:#999; font-size:13px; line-height:1.7;">
-              কোনো সমস্যা হলে — <a href="mailto:${supportEmail}" style="color:#244B43; text-decoration:none;">${supportEmail}</a>
+              কোনো সমস্যা হলে — <a href="mailto:${emailUser}" style="color:#244B43; text-decoration:none;">${emailUser}</a>
             </p>
           </td></tr>
         </table>
       </td>
     </tr>
-
-    <!-- Footer -->
     <tr>
       <td style="background:#fafafa; border-top:1px solid #f0f0f0; padding:16px 40px;">
         <p style="margin:0; font-size:12px; color:#bbb;">
@@ -85,14 +73,17 @@ export const introEmail = async (toEmail, userName, unsubscribeToken) => {
         </p>
       </td>
     </tr>
-
   </table>
   </td></tr>
 </table>
 </body>
 </html>`,
     });
+
+    return true;
   } catch (error) {
-    console.log(error.message);
+    // ✅ Bug 4 fix
+    console.error(`❌ Intro email failed for ${toEmail}:`, error.message);
+    return false;
   }
 };
