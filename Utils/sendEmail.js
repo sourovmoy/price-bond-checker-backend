@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 export const sendWindowNotification = async (
   toEmail,
   userName,
-  wonBonds, // ✅ Array — [{ number, label, amount }, ...]
+  wonBonds,
   unsubscribeToken,
 ) => {
   const emailUser = process.env.EMAIL_USER;

@@ -189,8 +189,15 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
     const database = await getDB();
     const usersCollection = database.collection("users");
     const pricebondCollection = database.collection("Pricebonds");
+    const prizeResultCollection = database.collection("PrizebondResults");
+    const notificationCollection = database.collection("notifications");
 
     const { PriceBond } = req.body;
+    if (!PriceBond || typeof PriceBond !== "string") {
+      return res
+        .status(400)
+        .json({ success: false, message: "সঠিক বন্ড নম্বর প্রদান করুন!" });
+    }
     const email = req.tokenEmail;
 
     const user = await usersCollection.findOne({ email });
@@ -198,7 +205,6 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
       return res.status(404).json({ message: "User not found in database!" });
     }
 
-    // ✅ Duplicate check
     const duplicate = await pricebondCollection.findOne({
       email,
       "PriceBond.number": PriceBond,
@@ -209,27 +215,74 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
         .status(409)
         .json({ message: "এই বন্ড নম্বরটি আগেই যোগ করা হয়েছে!" });
     }
+    const slicePricebond = PriceBond.slice(-7);
+    const matchedResult = await prizeResultCollection.findOne({
+      numbers: slicePricebond,
+    });
+
+    let bondStatus = "pending";
+    let prizeDetails = null;
+    let successMessage =
+      "বন্ডটি সফলভাবে আপনার অ্যাকাউন্টে যোগ করা হয়েছে। পরবর্তী ড্র-তে চোখ রাখুন!";
+    if (matchedResult) {
+      bondStatus = "won";
+      const specificPrize = matchedResult.prizes.find((p) =>
+        p.numbers.includes(slicePricebond),
+      );
+
+      if (specificPrize) {
+        prizeDetails = {
+          label: specificPrize.label,
+          amount: specificPrize.amount,
+          tier: specificPrize.tier,
+        };
+        successMessage = `অভিনন্দন! আপনার বন্ডটি ${specificPrize.label} (${specificPrize.amount} টাকা) জিতেছে!`;
+      }
+    }
 
     const { name, phone, imageUrl } = user;
 
     const newBond = {
       number: PriceBond,
       addedAt: new Date(),
-      result: "pending",
+      result: bondStatus,
+      ...(prizeDetails && prizeDetails),
     };
 
     const result = await pricebondCollection.updateOne(
       { email },
       {
         $setOnInsert: { name, phone, email, imageUrl },
-        $push: { PriceBond: newBond }, // ✅ $addToSet এর বদলে $push
+        $push: { PriceBond: newBond },
       },
       { upsert: true },
     );
-
+    if (bondStatus === "won" && prizeDetails) {
+      const notificationData = {
+        email: req.tokenEmail,
+        name,
+        bondNumber: PriceBond,
+        prize: {
+          label: prizeDetails.label,
+          amount: prizeDetails.amount,
+        },
+        message: `আপনার বন্ড ${PriceBond} বিজয়ী হয়েছে! পুরস্কার: ${prizeDetails.label} - ৳${prizeDetails.amount.toLocaleString("bn-BD")}`,
+        isRead: false,
+        createdAt: new Date(),
+      };
+      await notificationCollection.insertOne(notificationData);
+      sendWindowNotification(
+        user.email,
+        user.name,
+        [{ number: PriceBond, ...prizeDetails }],
+        user.unsubscribeToken,
+      );
+    }
     res.status(200).json({
       success: true,
-      message: "বন্ড সফলভাবে যোগ হয়েছে!",
+      message: successMessage,
+      isWinner: bondStatus === "won",
+      prizeInfo: prizeDetails,
       result,
     });
   } catch (error) {
@@ -444,6 +497,16 @@ app.post(
       const data = await pdfParse(req.file.buffer, { verbosity: -1 });
       const text = data.text;
 
+      const drawMatch = text.match(/(\d+)\s*Zg/i);
+      const drawNumber = drawMatch ? parseInt(drawMatch[1]) : null;
+
+      if (!drawNumber) {
+        return res.status(400).json({
+          message:
+            "PDF থেকে ড্র নম্বর (যেমন: 122) স্বয়ংক্রিয়ভাবে খুঁজে পাওয়া যায়নি!",
+        });
+      }
+
       const numberPattern = /\b\d{7}\b/g;
       const rawNumbers = text.match(numberPattern) || [];
 
@@ -499,11 +562,11 @@ app.post(
         });
       }
 
-      const db = await getDB();
-      const usersCollection = db.collection("users");
-      const pricebondCollection = db.collection("Pricebonds");
-      const notificationCollection = db.collection("notifications");
-      const prizeResultCollection = db.collection("PrizebondResults");
+      const database = await getDB();
+      const usersCollection = database.collection("users");
+      const pricebondCollection = database.collection("Pricebonds");
+      const notificationCollection = database.collection("notifications");
+      const prizeResultCollection = database.collection("PrizebondResults");
 
       const existing = await prizeResultCollection.findOne({
         numbers: { $in: [...allWinningNumbers] },
@@ -518,6 +581,7 @@ app.post(
       if (allDocs.length === 0) {
         await prizeResultCollection.insertOne({
           uploadedAt: new Date(),
+          drawNumber,
           uploadedBy: req.tokenEmail,
           totalWinners: expectedTotal,
           prizes: prizeResult,
@@ -618,6 +682,7 @@ app.post(
 
       await prizeResultCollection.insertOne({
         uploadedAt: new Date(),
+        drawNumber,
         uploadedBy: req.tokenEmail,
         totalWinners: expectedTotal,
         prizes: prizeResult,
