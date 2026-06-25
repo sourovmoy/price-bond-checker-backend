@@ -1,6 +1,7 @@
-node_modules
-.env
-.env.local
-price-bond-checker-firebase-admin.json
-.vercel
+node_modules
+.env
+.env.local
+price-bond-checker-firebase-admin.json
+.vercel
 .env*
+config.bat

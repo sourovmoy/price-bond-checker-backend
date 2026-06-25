@@ -860,14 +860,49 @@ app.get("/price-bonds-all-result", async (req, res) => {
   try {
     const database = await getDB();
     const prizeResultCollection = database.collection("PrizebondResults");
-    const result = await prizeResultCollection.find().toArray();
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 6;
+    const skip = (page - 1) * limit;
+
+    const [result, total] = await Promise.all([
+      prizeResultCollection
+        .find()
+        .sort({ drawNumber: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      prizeResultCollection.countDocuments(),
+    ]);
+
     res.status(200).json({
       message: "All result",
       result,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: page < Math.ceil(total / limit),
+        hasPrevPage: page > 1,
+      },
     });
   } catch (error) {
-    console.log(error);
-
+    res.status(500).json({ message: "Data is not fetched" });
+  }
+});
+//for single result
+app.get("/price-bonds-all-result/:id", async (req, res) => {
+  try {
+    const database = await getDB();
+    const prizeResultCollection = database.collection("PrizebondResults");
+    const query = { _id: new ObjectId(req.params.id) };
+    const result = await prizeResultCollection.findOne(query);
+    res.status(200).json({
+      message: "Single result",
+      result,
+    });
+  } catch (error) {
     res.status(500).json({
       message: "Data is not feched",
     });
