@@ -929,12 +929,25 @@ app.get("/users-collection", verifyJWT, verifyAdmin, async (req, res) => {
       .find(query)
       .sort({ created_at: -1 })
       .toArray();
-    console.log(res);
     res.status(200).json({ message: "All Users", user });
   } catch (error) {
-    console.log(error);
     res.status(500).json({
       message: "Cannot get users",
+    });
+  }
+});
+// User delete
+app.delete("/delete-user/:id", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const db = await getDB();
+    const userCollection = db.collection("users");
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await userCollection.deleteOne(query);
+    res.status(200).json({ message: "User deleted successfully", result });
+  } catch (error) {
+    res.status(500).json({
+      message: "Cannot delete user",
     });
   }
 });
