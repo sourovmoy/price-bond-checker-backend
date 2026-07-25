@@ -139,11 +139,13 @@ app.post("/user", verifyJWT, async (req, res) => {
       });
     }
 
-    const { name, photoURL } = req.body;
+    const { name, photoURL, phone } = req.body;
+
     const user = {
       name,
       photoURL,
       email,
+      phone,
       role: "member",
       created_at: new Date(),
       emailNotification: true,
@@ -922,7 +924,7 @@ app.get("/users-collection", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const db = await getDB();
     const userCollection = db.collection("users");
-    const query = { role: { $ne: "admin" } };
+    const query = { email: { $ne: req.tokenEmail } };
     const user = await userCollection
       .find(query)
       .sort({ created_at: -1 })
