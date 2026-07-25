@@ -1,4 +1,7 @@
+// import dotenv from "dotenv";
 import crypto from "crypto";
+
+// dotenv.config();
 
 import express from "express";
 import cors from "cors";
@@ -51,6 +54,13 @@ app.use(express.json());
 
 // 🍃 MongoDB Client Setup
 const uri = process.env.MONGODB_URI;
+if (!uri) {
+  console.error(
+    "Missing MONGODB_URI environment variable. Please set it in .env or your deployment environment.",
+  );
+  process.exit(1);
+}
+
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -903,6 +913,26 @@ app.get("/price-bonds-all-result/:id", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Data is not feched",
+    });
+  }
+});
+
+//Users collection
+app.get("/users-collection", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const db = await getDB();
+    const userCollection = db.collection("users");
+    const query = { role: { $ne: "admin" } };
+    const user = await userCollection
+      .find(query)
+      .sort({ created_at: -1 })
+      .toArray();
+    console.log(res);
+    res.status(200).json({ message: "All Users", user });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: "Cannot get users",
     });
   }
 });
