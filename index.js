@@ -52,7 +52,6 @@ app.use(
 );
 app.use(express.json());
 
-// 🍃 MongoDB Client Setup
 const uri = process.env.MONGODB_URI;
 if (!uri) {
   console.error(
@@ -226,28 +225,40 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
         .json({ message: "এই বন্ড নম্বরটি আগেই যোগ করা হয়েছে!" });
     }
     const slicePricebond = PriceBond.slice(-7);
-    const matchedResult = await prizeResultCollection.findOne({
-      numbers: slicePricebond,
-    });
+    const latestResults = await prizeResultCollection
+      .find({})
+      .sort({ drawNumber: -1 })
+      .limit(8)
+      .toArray();
 
+    console.log(latestResults);
+
+    let matchedResult = null;
+    let specificPrize = null;
+
+    for (const resultDoc of latestResults) {
+      const found = resultDoc.prizes.find((p) =>
+        p.numbers.includes(slicePricebond),
+      );
+      if (found) {
+        matchedResult = resultDoc;
+        specificPrize = found;
+        break;
+      }
+    }
     let bondStatus = "pending";
     let prizeDetails = null;
     let successMessage =
       "বন্ডটি সফলভাবে আপনার অ্যাকাউন্টে যোগ করা হয়েছে। পরবর্তী ড্র-তে চোখ রাখুন!";
-    if (matchedResult) {
-      bondStatus = "won";
-      const specificPrize = matchedResult.prizes.find((p) =>
-        p.numbers.includes(slicePricebond),
-      );
 
-      if (specificPrize) {
-        prizeDetails = {
-          label: specificPrize.label,
-          amount: specificPrize.amount,
-          tier: specificPrize.tier,
-        };
-        successMessage = `অভিনন্দন! আপনার বন্ডটি ${specificPrize.label} (${specificPrize.amount} টাকা) জিতেছে!`;
-      }
+    if (matchedResult && specificPrize) {
+      bondStatus = "won";
+      prizeDetails = {
+        label: specificPrize.label,
+        amount: specificPrize.amount,
+        tier: specificPrize.tier,
+      };
+      successMessage = `অভিনন্দন! আপনার বন্ডটি ${specificPrize.label} (${specificPrize.amount} টাকা) জিতেছে!`;
     }
 
     const { name, phone, imageUrl } = user;
