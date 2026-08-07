@@ -231,8 +231,6 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
       .limit(8)
       .toArray();
 
-    console.log(latestResults);
-
     let matchedResult = null;
     let specificPrize = null;
 
@@ -261,7 +259,7 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
       successMessage = `অভিনন্দন! আপনার বন্ডটি ${specificPrize.label} (${specificPrize.amount} টাকা) জিতেছে!`;
     }
 
-    const { name, phone, imageUrl } = user;
+    const { name, phone, photoURL } = user;
 
     const newBond = {
       number: PriceBond,
@@ -273,7 +271,7 @@ app.post("/add-price-bond", verifyJWT, async (req, res) => {
     const result = await pricebondCollection.updateOne(
       { email },
       {
-        $setOnInsert: { name, phone, email, imageUrl },
+        $setOnInsert: { name, phone, email, photoURL },
         $push: { PriceBond: newBond },
       },
       { upsert: true },
@@ -407,7 +405,7 @@ app.get("/admin/all-users-bonds", verifyJWT, verifyAdmin, async (req, res) => {
             name: 1,
             email: 1,
             phone: 1,
-            imageUrl: 1,
+            photoURL: 1,
             // যদি PriceBond অ্যারে থাকে তবে তার সাইজ (সংখ্যা) বের করবে, না থাকলে ০ দেবে
             bondsCount: {
               $cond: {
