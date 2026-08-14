@@ -452,7 +452,9 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
     const pricebondCollection = db.collection("Pricebonds");
     // admin check
     const requester = await usersCollection.findOne({ email: req.tokenEmail });
-    const totalUsers = await usersCollection.countDocuments();
+    const totalUsers = await usersCollection.countDocuments({
+      role: { $ne: "admin" },
+    });
     const allBondDocs = await pricebondCollection.find({}).toArray();
 
     let totalBonds = 0;
