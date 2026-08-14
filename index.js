@@ -406,7 +406,6 @@ app.get("/admin/all-users-bonds", verifyJWT, verifyAdmin, async (req, res) => {
             email: 1,
             phone: 1,
             photoURL: 1,
-            // যদি PriceBond অ্যারে থাকে তবে তার সাইজ (সংখ্যা) বের করবে, না থাকলে ০ দেবে
             bondsCount: {
               $cond: {
                 if: { $isArray: "$PriceBond" },
@@ -946,14 +945,17 @@ app.get("/users-collection", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 // User delete
-app.delete("/delete-user/:id", verifyJWT, verifyAdmin, async (req, res) => {
+app.delete("/delete-user/:email", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const db = await getDB();
     const userCollection = db.collection("users");
-    const id = req.params.id;
-    const query = { _id: new ObjectId(id) };
-    const result = await userCollection.deleteOne(query);
-    res.status(200).json({ message: "User deleted successfully", result });
+    const pricebondCollection = db.collection("Pricebonds");
+    const email = req.params.email;
+    const result = await userCollection.deleteOne({ email });
+    const result2 = await pricebondCollection.deleteOne({ email });
+    res
+      .status(200)
+      .json({ message: "User deleted successfully", result, result2 });
   } catch (error) {
     res.status(500).json({
       message: "Cannot delete user",
