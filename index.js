@@ -16,7 +16,7 @@ import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { sendWindowNotification } from "./Utils/sendEmail.js";
 import { renderUnsubscribePage } from "./Utils/renderUnsubscribePage.js";
-import { introEmail } from "./Utils/sendIntroEmail.js";
+import { introEmail } from "./Utils/SendIntroEmail.js";
 const app = express();
 const port = process.env.PORT || 3000;
 const upload = multer({ storage: multer.memoryStorage() });
@@ -102,8 +102,7 @@ const verifyAdmin = async (req, res, next) => {
   try {
     const database = await getDB();
     const usersCollection = database.collection("users");
-    const email = req.tokenEmail; // verifyJWT থেকে পাওয়া ইমেইল
-
+    const email = req.tokenEmail;
     const user = await usersCollection.findOne({ email });
 
     if (!user || user.role !== "admin") {
@@ -360,7 +359,6 @@ app.get("/dashboard/stats", verifyJWT, async (req, res) => {
 
     const total = bonds.length;
     const won = bonds.filter((b) => b.result === "won").length;
-    const lost = bonds.filter((b) => b.result === "lost").length;
     const pending = bonds.filter((b) => b.result === "pending").length;
     const totalValue = total * 100;
 
@@ -380,7 +378,6 @@ app.get("/dashboard/stats", verifyJWT, async (req, res) => {
     res.status(200).json({
       total,
       won,
-      lost,
       pending,
       totalValue,
       monthlyData,
@@ -459,18 +456,15 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
 
     let totalBonds = 0;
     let totalWon = 0;
-    let totalLost = 0;
     let totalPending = 0;
 
     const userBondData = allBondDocs.map((doc) => {
       const bonds = doc.PriceBond || [];
       const won = bonds.filter((b) => b.result === "won").length;
-      const lost = bonds.filter((b) => b.result === "lost").length;
       const pending = bonds.filter((b) => b.result === "pending").length;
 
       totalBonds += bonds.length;
       totalWon += won;
-      totalLost += lost;
       totalPending += pending;
 
       return {
@@ -478,24 +472,22 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
         email: doc.email,
         totalBonds: bonds.length,
         won,
-        lost,
         pending,
       };
     });
 
     const chartData = userBondData
       .sort((a, b) => b.totalBonds - a.totalBonds)
-      .slice(0, 10); // top 10 user
+      .slice(0, 10);
 
     res.status(200).json({
       totalUsers,
       totalBonds,
       totalWon,
-      totalLost,
       totalPending,
       totalValue: totalBonds * 100,
-      users: userBondData, // table-এর জন্য full list
-      chartData, // chart-এর জন্য top 10
+      users: userBondData,
+      chartData,
     });
   } catch (error) {
     res.status(500).json({ message: "Internal Server Error" });
