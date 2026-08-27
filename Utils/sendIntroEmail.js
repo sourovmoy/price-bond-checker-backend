@@ -3,7 +3,6 @@ import nodemailer from "nodemailer";
 export const introEmail = async (toEmail, userName, unsubscribeToken) => {
   const emailUser = process.env.EMAIL_USER;
   const emailPass = process.env.EMAIL_PASS;
-
   if (!emailPass || !emailUser) {
     return false;
   }
@@ -82,7 +81,6 @@ export const introEmail = async (toEmail, userName, unsubscribeToken) => {
 
     return true;
   } catch (error) {
-    // ✅ Bug 4 fix
     console.error(`❌ Intro email failed for ${toEmail}:`, error.message);
     return false;
   }

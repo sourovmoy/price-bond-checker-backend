@@ -1,7 +1,7 @@
-// import dotenv from "dotenv";
+import dotenv from "dotenv";
 import crypto from "crypto";
 
-// dotenv.config();
+dotenv.config();
 
 import express from "express";
 import cors from "cors";
@@ -16,7 +16,7 @@ import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { sendWindowNotification } from "./Utils/sendEmail.js";
 import { renderUnsubscribePage } from "./Utils/renderUnsubscribePage.js";
-import { introEmail } from "./Utils/SendIntroEmail.js";
+import { introEmail } from "./Utils/sendIntroEmail.js";
 const app = express();
 const port = process.env.PORT || 3000;
 const upload = multer({ storage: multer.memoryStorage() });
@@ -362,7 +362,6 @@ app.get("/dashboard/stats", verifyJWT, async (req, res) => {
     const pending = bonds.filter((b) => b.result === "pending").length;
     const totalValue = total * 100;
 
-    // মাস অনুযায়ী count
     const monthMap = {};
     bonds.forEach((bond) => {
       if (!bond.addedAt) return;
@@ -378,7 +377,6 @@ app.get("/dashboard/stats", verifyJWT, async (req, res) => {
     res.status(200).json({
       total,
       won,
-
       pending,
       totalValue,
       monthlyData,
@@ -457,18 +455,15 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
 
     let totalBonds = 0;
     let totalWon = 0;
-    let totalLost = 0;
     let totalPending = 0;
 
     const userBondData = allBondDocs.map((doc) => {
       const bonds = doc.PriceBond || [];
       const won = bonds.filter((b) => b.result === "won").length;
-      const lost = bonds.filter((b) => b.result === "lost").length;
       const pending = bonds.filter((b) => b.result === "pending").length;
 
       totalBonds += bonds.length;
       totalWon += won;
-      totalLost += lost;
       totalPending += pending;
 
       return {
@@ -476,7 +471,6 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
         email: doc.email,
         totalBonds: bonds.length,
         won,
-        lost,
         pending,
       };
     });
@@ -489,7 +483,6 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
       totalUsers,
       totalBonds,
       totalWon,
-      totalLost,
       totalPending,
       totalValue: totalBonds * 100,
       users: userBondData,
