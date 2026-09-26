@@ -77,7 +77,7 @@ async function getDB() {
     dbInstance = client.db("pricebond-checker");
     return dbInstance;
   } catch (error) {
-    console.error("MongoDB connection failed:", error.message);
+    console.error("MongoDB connection failed:", error.code);
     throw error;
   }
 }
@@ -447,7 +447,6 @@ app.get("/admin/dashboard-stats", verifyJWT, verifyAdmin, async (req, res) => {
     const usersCollection = db.collection("users");
     const pricebondCollection = db.collection("Pricebonds");
     // admin check
-    const requester = await usersCollection.findOne({ email: req.tokenEmail });
     const totalUsers = await usersCollection.countDocuments({
       role: { $ne: "admin" },
     });
@@ -954,6 +953,44 @@ app.delete("/delete-user/:email", verifyJWT, verifyAdmin, async (req, res) => {
     res.status(500).json({
       message: "Cannot delete user",
     });
+  }
+});
+
+// Statistics collections
+app.get("/statistics", async (req, res) => {
+  try {
+    const db = await getDB();
+    const usersCollection = db.collection("users");
+    const pricebondCollection = db.collection("Pricebonds");
+    const totalUsers = await usersCollection.countDocuments({
+      role: { $ne: "admin" },
+    });
+    const allBondDocs = await pricebondCollection.find({}).toArray();
+
+    let totalBonds = 0;
+    let totalWon = 0;
+
+    const userBondData = allBondDocs.map((doc) => {
+      const bonds = doc.PriceBond || [];
+      const won = bonds.filter((b) => b.result === "won").length;
+
+      totalBonds += bonds.length;
+      totalWon += won;
+
+      return {
+        totalBonds: bonds.length,
+        won,
+      };
+    });
+
+    res.status(200).json({
+      totalUsers,
+      totalBonds,
+      totalWon,
+    });
+  } catch (error) {
+    // console.log(error.message);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 // Server Listen
