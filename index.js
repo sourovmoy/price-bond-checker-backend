@@ -993,6 +993,26 @@ app.get("/statistics", async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
+
+app.get("/wining-results", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const db = await getDB();
+    const notificationCollection = db.collection("notifications");
+
+    const result = await notificationCollection
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+    console.log(result);
+    res.status(200).json({
+      message: "Winning number sent",
+      result,
+    });
+  } catch (error) {
+    // console.log(error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 // Server Listen
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
