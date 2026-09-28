@@ -962,24 +962,21 @@ app.get("/statistics", async (req, res) => {
     const db = await getDB();
     const usersCollection = db.collection("users");
     const pricebondCollection = db.collection("Pricebonds");
+    const notificationCollection = db.collection("notifications");
     const totalUsers = await usersCollection.countDocuments({
       role: { $ne: "admin" },
     });
+
     const allBondDocs = await pricebondCollection.find({}).toArray();
 
+    const totalWon = await notificationCollection.countDocuments();
     let totalBonds = 0;
-    let totalWon = 0;
-
     const userBondData = allBondDocs.map((doc) => {
       const bonds = doc.PriceBond || [];
-      const won = bonds.filter((b) => b.result === "won").length;
 
       totalBonds += bonds.length;
-      totalWon += won;
-
       return {
         totalBonds: bonds.length,
-        won,
       };
     });
 
