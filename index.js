@@ -192,121 +192,121 @@ app.patch("/user/update-profile", verifyJWT, async (req, res) => {
 });
 
 // 🎟️ Add Price Bond Route
-app.post("/add-price-bond", verifyJWT, async (req, res) => {
-  try {
-    const database = await getDB();
-    const usersCollection = database.collection("users");
-    const pricebondCollection = database.collection("Pricebonds");
-    const prizeResultCollection = database.collection("PrizebondResults");
-    const notificationCollection = database.collection("notifications");
+// app.post("/add-price-bond", verifyJWT, async (req, res) => {
+//   try {
+//     const database = await getDB();
+//     const usersCollection = database.collection("users");
+//     const pricebondCollection = database.collection("Pricebonds");
+//     const prizeResultCollection = database.collection("PrizebondResults");
+//     const notificationCollection = database.collection("notifications");
 
-    const { PriceBond } = req.body;
-    if (!PriceBond || typeof PriceBond !== "string") {
-      return res
-        .status(400)
-        .json({ success: false, message: "সঠিক বন্ড নম্বর প্রদান করুন!" });
-    }
-    const email = req.tokenEmail;
+//     const { PriceBond } = req.body;
+//     if (!PriceBond || typeof PriceBond !== "string") {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "সঠিক বন্ড নম্বর প্রদান করুন!" });
+//     }
+//     const email = req.tokenEmail;
 
-    const user = await usersCollection.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found in database!" });
-    }
+//     const user = await usersCollection.findOne({ email });
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found in database!" });
+//     }
 
-    const duplicate = await pricebondCollection.findOne({
-      email,
-      "PriceBond.number": PriceBond,
-    });
+//     const duplicate = await pricebondCollection.findOne({
+//       email,
+//       "PriceBond.number": PriceBond,
+//     });
 
-    if (duplicate) {
-      return res
-        .status(409)
-        .json({ message: "এই বন্ড নম্বরটি আগেই যোগ করা হয়েছে!" });
-    }
-    const slicePricebond = PriceBond.slice(-7);
-    const latestResults = await prizeResultCollection
-      .find({})
-      .sort({ drawNumber: -1 })
-      .limit(8)
-      .toArray();
+//     if (duplicate) {
+//       return res
+//         .status(409)
+//         .json({ message: "এই বন্ড নম্বরটি আগেই যোগ করা হয়েছে!" });
+//     }
+//     const slicePricebond = PriceBond.slice(-7);
+//     const latestResults = await prizeResultCollection
+//       .find({})
+//       .sort({ drawNumber: -1 })
+//       .limit(8)
+//       .toArray();
 
-    let matchedResult = null;
-    let specificPrize = null;
+//     let matchedResult = null;
+//     let specificPrize = null;
 
-    for (const resultDoc of latestResults) {
-      const found = resultDoc.prizes.find((p) =>
-        p.numbers.includes(slicePricebond),
-      );
-      if (found) {
-        matchedResult = resultDoc;
-        specificPrize = found;
-        break;
-      }
-    }
-    let bondStatus = "pending";
-    let prizeDetails = null;
-    let successMessage =
-      "বন্ডটি সফলভাবে আপনার অ্যাকাউন্টে যোগ করা হয়েছে। পরবর্তী ড্র-তে চোখ রাখুন!";
+//     for (const resultDoc of latestResults) {
+//       const found = resultDoc.prizes.find((p) =>
+//         p.numbers.includes(slicePricebond),
+//       );
+//       if (found) {
+//         matchedResult = resultDoc;
+//         specificPrize = found;
+//         break;
+//       }
+//     }
+//     let bondStatus = "pending";
+//     let prizeDetails = null;
+//     let successMessage =
+//       "বন্ডটি সফলভাবে আপনার অ্যাকাউন্টে যোগ করা হয়েছে। পরবর্তী ড্র-তে চোখ রাখুন!";
 
-    if (matchedResult && specificPrize) {
-      bondStatus = "won";
-      prizeDetails = {
-        label: specificPrize.label,
-        amount: specificPrize.amount,
-        tier: specificPrize.tier,
-      };
-      successMessage = `অভিনন্দন! আপনার বন্ডটি ${specificPrize.label} (${specificPrize.amount} টাকা) জিতেছে!`;
-    }
+//     if (matchedResult && specificPrize) {
+//       bondStatus = "won";
+//       prizeDetails = {
+//         label: specificPrize.label,
+//         amount: specificPrize.amount,
+//         tier: specificPrize.tier,
+//       };
+//       successMessage = `অভিনন্দন! আপনার বন্ডটি ${specificPrize.label} (${specificPrize.amount} টাকা) জিতেছে!`;
+//     }
 
-    const { name, phone, photoURL } = user;
+//     const { name, phone, photoURL } = user;
 
-    const newBond = {
-      number: PriceBond,
-      addedAt: new Date(),
-      result: bondStatus,
-      ...(prizeDetails && prizeDetails),
-    };
+//     const newBond = {
+//       number: PriceBond,
+//       addedAt: new Date(),
+//       result: bondStatus,
+//       ...(prizeDetails && prizeDetails),
+//     };
 
-    const result = await pricebondCollection.updateOne(
-      { email },
-      {
-        $setOnInsert: { name, phone, email, photoURL },
-        $push: { PriceBond: newBond },
-      },
-      { upsert: true },
-    );
-    if (bondStatus === "won" && prizeDetails) {
-      const notificationData = {
-        email: req.tokenEmail,
-        name,
-        bondNumber: PriceBond,
-        prize: {
-          label: prizeDetails.label,
-          amount: prizeDetails.amount,
-        },
-        message: `আপনার বন্ড ${PriceBond} বিজয়ী হয়েছে! পুরস্কার: ${prizeDetails.label} - ৳${prizeDetails.amount.toLocaleString("bn-BD")}`,
-        isRead: false,
-        createdAt: new Date(),
-      };
-      await notificationCollection.insertOne(notificationData);
-      sendWindowNotification(
-        user.email,
-        user.name,
-        [{ number: PriceBond, ...prizeDetails }],
-        user.unsubscribeToken,
-      );
-    }
-    res.status(200).json({
-      success: true,
-      message: successMessage,
-      isWinner: bondStatus === "won",
-      prizeInfo: prizeDetails,
-      result,
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
+//     const result = await pricebondCollection.updateOne(
+//       { email },
+//       {
+//         $setOnInsert: { name, phone, email, photoURL },
+//         $push: { PriceBond: newBond },
+//       },
+//       { upsert: true },
+//     );
+//     if (bondStatus === "won" && prizeDetails) {
+//       const notificationData = {
+//         email: req.tokenEmail,
+//         name,
+//         bondNumber: PriceBond,
+//         prize: {
+//           label: prizeDetails.label,
+//           amount: prizeDetails.amount,
+//         },
+//         message: `আপনার বন্ড ${PriceBond} বিজয়ী হয়েছে! পুরস্কার: ${prizeDetails.label} - ৳${prizeDetails.amount.toLocaleString("bn-BD")}`,
+//         isRead: false,
+//         createdAt: new Date(),
+//       };
+//       await notificationCollection.insertOne(notificationData);
+//       sendWindowNotification(
+//         user.email,
+//         user.name,
+//         [{ number: PriceBond, ...prizeDetails }],
+//         user.unsubscribeToken,
+//       );
+//     }
+//     res.status(200).json({
+//       success: true,
+//       message: successMessage,
+//       isWinner: bondStatus === "won",
+//       prizeInfo: prizeDetails,
+//       result,
+//     });
+//   } catch (error) {
+//     res.status(500).json({ message: "Internal Server Error" });
+//   }
+// });
 
 // user role
 app.get("/user/role", verifyJWT, async (req, res) => {
@@ -1007,6 +1007,190 @@ app.get("/wining-results", verifyJWT, verifyAdmin, async (req, res) => {
     });
   } catch (error) {
     // console.log(error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// single or Multiple bonds add
+const MAX_BONDS_PER_REQUEST = 50;
+const PREFIX_REGEX = /^[ক-নপ-রলশ-হড়ঢ়য়ৎংঃঁ]{2}$/;
+
+const toEnglishDigits = (str) =>
+  str.replace(/[০-৯]/g, (d) => "০১২৩৪৫৬৭৮৯".indexOf(d));
+
+// একটি বন্ড নম্বর সঠিক কিনা যাচাই (২টি বাংলা অক্ষর + ৭ ডিজিট)
+const normalizeBond = (raw) => {
+  if (typeof raw !== "string") return null;
+  const value = toEnglishDigits(raw.trim());
+  if (value.length !== 9) return null;
+  if (!PREFIX_REGEX.test(value.substring(0, 2))) return null;
+  if (!/^[0-9]{7}$/.test(value.substring(2))) return null;
+  return value;
+};
+
+app.post("/add-multiple-price-bonds", verifyJWT, async (req, res) => {
+  try {
+    const { bonds } = req.body;
+
+    // ১. ইনপুট যাচাই
+    if (!Array.isArray(bonds) || bonds.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "কমপক্ষে ১টি বন্ড নম্বর দিন!" });
+    }
+    if (bonds.length > MAX_BONDS_PER_REQUEST) {
+      return res.status(400).json({
+        success: false,
+        message: `একসাথে সর্বোচ্চ ${MAX_BONDS_PER_REQUEST}টি বন্ড যোগ করা যাবে!`,
+      });
+    }
+
+    const invalid = [];
+    const cleaned = [];
+    for (const raw of bonds) {
+      const bond = normalizeBond(raw);
+      if (!bond) invalid.push(raw);
+      else cleaned.push(bond);
+    }
+    if (invalid.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "কিছু বন্ড নম্বর সঠিক ফরম্যাটে নেই!",
+        invalid,
+      });
+    }
+
+    // রিকোয়েস্টের ভেতরের ডুপ্লিকেট বাদ
+    const uniqueBonds = [...new Set(cleaned)];
+
+    const database = await getDB();
+    const usersCollection = database.collection("users");
+    const pricebondCollection = database.collection("Pricebonds");
+    const prizeResultCollection = database.collection("PrizebondResults");
+    const notificationCollection = database.collection("notifications");
+
+    const email = req.tokenEmail;
+    const user = await usersCollection.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found in database!" });
+    }
+
+    // ২. আগে থেকে যোগ করা বন্ড একবারেই আনা (বন্ডপ্রতি আলাদা কোয়েরি নয়)
+    const existingDoc = await pricebondCollection.findOne(
+      { email },
+      { projection: { "PriceBond.number": 1 } },
+    );
+    const existingNumbers = new Set(
+      (existingDoc?.PriceBond || []).map((b) => b.number),
+    );
+
+    const newNumbers = uniqueBonds.filter((b) => !existingNumbers.has(b));
+    const duplicates = uniqueBonds.filter((b) => existingNumbers.has(b));
+
+    if (newNumbers.length === 0) {
+      return res.status(409).json({
+        success: false,
+        message: "এই সবগুলো বন্ড নম্বর আগেই যোগ করা হয়েছে!",
+        duplicates,
+      });
+    }
+
+    // ৩. সর্বশেষ ৮টি ড্র-এর ফলাফল একবারই আনা
+    const latestResults = await prizeResultCollection
+      .find({})
+      .sort({ drawNumber: -1 })
+      .limit(8)
+      .toArray();
+
+    const findPrize = (bondNumber) => {
+      const last7 = bondNumber.slice(-7);
+      for (const resultDoc of latestResults) {
+        const found = resultDoc.prizes.find((p) => p.numbers.includes(last7));
+        if (found) return found;
+      }
+      return null;
+    };
+
+    // ৪. প্রতিটি নতুন বন্ডের স্ট্যাটাস নির্ধারণ
+    const now = new Date();
+    const newBonds = [];
+    const winners = [];
+
+    for (const number of newNumbers) {
+      const prize = findPrize(number);
+      if (prize) {
+        const prizeDetails = {
+          label: prize.label,
+          amount: prize.amount,
+          tier: prize.tier,
+        };
+        newBonds.push({
+          number,
+          addedAt: now,
+          result: "won",
+          ...prizeDetails,
+        });
+        winners.push({ number, ...prizeDetails });
+      } else {
+        newBonds.push({ number, addedAt: now, result: "pending" });
+      }
+    }
+
+    // ৫. একটিমাত্র আপডেটে সব বন্ড সংরক্ষণ
+    const { name, phone, photoURL } = user;
+    const result = await pricebondCollection.updateOne(
+      { email },
+      {
+        $setOnInsert: { name, phone, email, photoURL },
+        $push: { PriceBond: { $each: newBonds } },
+      },
+      { upsert: true },
+    );
+
+    // ৬. বিজয়ী বন্ড থাকলে নোটিফিকেশন (প্রতি বিজয়ীর জন্য একটি) ও একটিমাত্র ইমেইল
+    if (winners.length > 0) {
+      const notifications = winners.map((w) => ({
+        email,
+        name,
+        bondNumber: w.number,
+        prize: { label: w.label, amount: w.amount },
+        message: `আপনার বন্ড ${w.number} বিজয়ী হয়েছে! পুরস্কার: ${w.label} - ৳${w.amount.toLocaleString("bn-BD")}`,
+        isRead: false,
+        createdAt: now,
+      }));
+      await notificationCollection.insertMany(notifications);
+
+      // ইমেইল ফেইল করলেও মূল রেসপন্স যেন না আটকায়
+      Promise.resolve(
+        sendWindowNotification(
+          user.email,
+          user.name,
+          winners,
+          user.unsubscribeToken,
+        ),
+      ).catch((err) => console.error("Email notification failed:", err));
+    }
+
+    // ৭. রেসপন্স
+    let message = `${newBonds.length}টি বন্ড সফলভাবে যোগ করা হয়েছে।`;
+    if (duplicates.length > 0) {
+      message += ` ${duplicates.length}টি আগে থেকেই ছিল, তাই বাদ দেওয়া হয়েছে।`;
+    }
+    if (winners.length > 0) {
+      message += ` অভিনন্দন! ${winners.length}টি বন্ড পুরস্কার জিতেছে!`;
+    }
+
+    res.status(200).json({
+      success: true,
+      message,
+      addedCount: newBonds.length,
+      duplicates,
+      winnersCount: winners.length,
+      winners,
+      result,
+    });
+  } catch (error) {
+    console.error("add-multiple-price-bonds error:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
